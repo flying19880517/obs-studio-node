@@ -6,7 +6,7 @@
   "license": "GPL-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/stream-labs/obs-studio-node.git"
+    "url": "git@github.com:stream-labs/obs-studio-node.git"
   },
   "bugs": {
     "url": "https://github.com/stream-labs/obs-studio-node/issues"
@@ -19,6 +19,7 @@
     "build:javascript": "tsc -p js",
     "build:docs": "typedoc --out docs",
     "local:config": "yarn install && git submodule update --init --recursive --force && cmake -Bbuild -H. -G\"Visual Studio 16 2019\" -A\"x64\" -DCMAKE_INSTALL_PREFIX=\"./obs-studio-node\" -DLIBOBS_BUILD_TYPE=\"debug\"",
+    "build": "yarn install && git submodule update --init --recursive --force && cmake -Bbuild -H. -G\"Visual Studio 17 2022\" -A\"x64\" -DCMAKE_INSTALL_PREFIX=\"./distribute/obs-studio-node\" -DLIBOBS_BUILD_TYPE=\"RelWithDebInfo\" -DOSN_LIBOBS_URL=\"D:/Work/obs-studio/build/obs-studio-x64-27.1.3-462-g98457ed50-modified.7z\" && cmake --build build --target install --config RelWithDebInfo",
     "local:build": "cmake --build build --target install --config Debug",
     "local:clean": "rm -rf build/*",
     "test": "electron-mocha -t 80000 -c true -r ts-node/register tests/osn-tests/src/**/*.ts --reporter tests/osn-tests/util/list-reporter.js"

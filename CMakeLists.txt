@@ -73,7 +73,7 @@ if (WIN32)
 	# StackWalker (Callstack rewind
 	FetchContent_Declare(
 	stackwalker
-	GIT_REPOSITORY https://github.com/stream-labs/StackWalker
+	GIT_REPOSITORY git@github.com:stream-labs/StackWalker.git
 	)
 
 	FetchContent_GetProperties(stackwalker)
@@ -86,7 +86,7 @@ endif()
 # Nlohmann JSON (modern JSON for C++)
 FetchContent_Declare(
   nlohmannjson
-  GIT_REPOSITORY https://github.com/nlohmann/json
+  GIT_REPOSITORY git@github.com:nlohmann/json.git
   GIT_TAG        aa0e847e5b57a00696bdcb6a834b927231b81613 # v3.10.3
 )
 

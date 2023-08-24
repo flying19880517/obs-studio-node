@@ -7,7 +7,7 @@ trigger:
       - '*'
 
 variables:
-  RuntimeURL: https://atom.io/download/atom-shell
+  RuntimeURL: https://artifacts.electronjs.org/headers/dist
   RuntimeName: iojs
   ElectronVersion: 13.4.0
   SLBuildDirectory: streamlabs-build

@@ -130,6 +130,7 @@ namespace OBS
 		uint32_t m_resizeOuterColor = 0xFF7E7E7E;
 		uint32_t m_resizeInnerColor = 0xFFFFFFFF;
 		bool     m_shouldDrawUI     = true;
+		bool     m_scaleAspectFill  = false;
 
 		enum obs_video_rendering_mode m_renderingMode = OBS_MAIN_VIDEO_RENDERING;
 

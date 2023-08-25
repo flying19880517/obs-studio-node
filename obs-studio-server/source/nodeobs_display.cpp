@@ -56,6 +56,29 @@ static void RecalculateApectRatioConstrainedSize(
 	outY = (int32_t(origH / 2) - int32_t(outH / 2));
 }
 
+static void RecalculateAspectFillRatioConstrainedSize(
+    uint32_t  origW,
+    uint32_t  origH,
+    uint32_t  sourceW,
+    uint32_t  sourceH,
+    int32_t&  outX,
+    int32_t&  outY,
+    uint32_t& outW,
+    uint32_t& outH)
+{
+	double_t sourceAR = double_t(sourceW) / double_t(sourceH);
+	double_t origAR   = double_t(origW) / double_t(origH);
+	if (origAR < sourceAR) {
+		outW = uint32_t(double_t(origH) * sourceAR);
+		outH = origH;
+	} else {
+		outW = origW;
+		outH = uint32_t(double_t(origW) * (1.0 / sourceAR));
+	}
+	outX = (int32_t(origW / 2) - int32_t(outW / 2));
+	outY = (int32_t(origH / 2) - int32_t(outH / 2));
+}
+
 #ifdef _WIN32
 enum class SystemWorkerMessage : uint32_t
 {
@@ -1235,6 +1258,10 @@ void OBS::Display::UpdatePreviewArea()
 	if (m_source) {
 		sourceW = obs_source_get_width(m_source);
 		sourceH = obs_source_get_height(m_source);
+		auto settings = obs_source_get_settings(m_source);
+		m_scaleAspectFill = obs_data_get_bool(settings, "DisplayScaleAspectFill");
+		// blog(LOG_DEBUG, "<%s> settings %d", __FUNCTION__, m_scaleAspectFill);
+		obs_data_release(settings);
 	} else {
 		obs_video_info ovi;
 		obs_get_video_info(&ovi);
@@ -1257,6 +1284,28 @@ void OBS::Display::UpdatePreviewArea()
 	    m_previewOffset.second,
 	    m_previewSize.first,
 	    m_previewSize.second);
+
+	if(m_scaleAspectFill){
+		RecalculateAspectFillRatioConstrainedSize(
+			m_gsInitData.cx,
+			m_gsInitData.cy,
+			sourceW,
+			sourceH,
+			m_previewOffset.first,
+			m_previewOffset.second,
+			m_previewSize.first,
+			m_previewSize.second);
+	}
+
+	// std::string msg = "<" + std::string(__FUNCTION__) + "> Adjusting display size to %ldx%ld. source %ldx%ld. preview offset %ld,%ld. preview size %ldx%ld. hwnd %d";
+	// blog(
+	// 	LOG_DEBUG,
+	// 	msg.c_str(),
+	// 	m_gsInitData.cx, m_gsInitData.cy,
+	// 	sourceW, sourceH,
+	// 	m_previewOffset.first, m_previewOffset.second,
+	// 	m_previewSize.first, m_previewSize.second,
+	// 	m_ourWindow);
 
 
 	offsetX = m_paddingSize;

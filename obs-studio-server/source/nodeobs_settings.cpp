@@ -24,6 +24,12 @@
 
 #ifdef WIN32
 #include <windows.h>
+#include "strmif.h"
+#include "uuids.h"
+#include "util/windows/ComPtr.hpp"
+#include "util/windows/CoTaskMemPtr.hpp"
+#include <mmdeviceapi.h>
+#include <functiondiscoverykeys_devpkey.h>
 #endif
 
 #ifdef __APPLE__
@@ -1067,6 +1073,17 @@ static bool isEncoderAvailableForStreaming(const char *encoder, obs_service_t *s
 	return false;
 }
 
+static bool isNvencAvailableForSimpleMode()
+{
+	// Only available if config already uses it
+	const char *current_stream_encoder = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "StreamEncoder");
+	const char *current_rec_encoder = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "RecEncoder");
+	bool nvenc_used_streaming = (current_stream_encoder && strcmp(current_stream_encoder, "nvenc") == 0);
+	bool nvenc_used_recording = (current_rec_encoder && strcmp(current_rec_encoder, "nvenc") == 0);
+
+	return (nvenc_used_streaming || nvenc_used_recording) && EncoderAvailable("ffmpeg_nvenc");
+}
+
 void OBS_settings::getSimpleAvailableEncoders(std::vector<std::pair<std::string, ipc::value>> *encoders, bool recording)
 {
 	encoders->push_back(std::make_pair("Software (x264)", ipc::value(SIMPLE_ENCODER_X264)));
@@ -1086,7 +1103,9 @@ void OBS_settings::getSimpleAvailableEncoders(std::vector<std::pair<std::string,
 	}
 
 	if (EncoderAvailable("jim_nvenc"))
-		encoders->push_back(std::make_pair("Hardware (NVENC, H.264)", ipc::value(SIMPLE_ENCODER_NVENC)));
+		encoders->push_back(std::make_pair("NVIDIA NVENC H.264 (new)", ipc::value(ENCODER_NEW_NVENC)));
+	if (isNvencAvailableForSimpleMode())
+		encoders->push_back(std::make_pair("NVIDIA NVENC H.264", ipc::value(SIMPLE_ENCODER_NVENC)));
 
 	const char *hevcEnc = EncoderAvailable("jim_hevc_nvenc") ? "jim_hevc_nvenc" : "ffmpeg_hevc_nvenc";
 	if (recording || isEncoderAvailableForStreaming(hevcEnc, OBS_service::getService())) {
@@ -2415,7 +2434,7 @@ void OBS_settings::getStandardRecordingSettings(SubCategory *subCategoryParamete
 		Parameter recSplitFileTime;
 		recSplitFileTime.name = "RecSplitFileTime";
 		recSplitFileTime.type = "OBS_PROPERTY_UINT";
-		recSplitFileTime.description = "Split Time (MB)";
+		recSplitFileTime.description = "Split Time (min)";
 
 		uint64_t recSplitFileTimeVal = config_get_uint(config, "AdvOut", "RecSplitFileTime");
 
@@ -2434,7 +2453,7 @@ void OBS_settings::getStandardRecordingSettings(SubCategory *subCategoryParamete
 		Parameter recSplitFileSize;
 		recSplitFileSize.name = "RecSplitFileSize";
 		recSplitFileSize.type = "OBS_PROPERTY_UINT";
-		recSplitFileSize.description = "Split Time (min)";
+		recSplitFileSize.description = "Split Size (MB)";
 
 		uint64_t recSplitFileSizeVal = config_get_uint(config, "AdvOut", "RecSplitFileSize");
 
@@ -3428,32 +3447,7 @@ std::vector<SubCategory> OBS_settings::getVideoSettings()
 
 	uint64_t fpsTypeValue = config_get_uint(ConfigManager::getInstance().getBasic(), "Video", "FPSType");
 
-	if (fpsTypeValue == 0) {
-		fpsType.push_back(std::make_pair("currentValue", ipc::value("Common FPS Values")));
-		fpsType.push_back(std::make_pair("Common FPS Values", ipc::value("Common FPS Values")));
-		fpsType.push_back(std::make_pair("Integer FPS Value", ipc::value("Integer FPS Value")));
-		fpsType.push_back(std::make_pair("Fractional FPS Value", ipc::value("Fractional FPS Value")));
-		entries.push_back(fpsType);
-
-		//Common FPS Values
-		std::vector<std::pair<std::string, ipc::value>> fpsCommon;
-		fpsCommon.push_back(std::make_pair("name", ipc::value("FPSCommon")));
-		fpsCommon.push_back(std::make_pair("type", ipc::value("OBS_PROPERTY_LIST")));
-		fpsCommon.push_back(std::make_pair("description", ipc::value("Common FPS Values")));
-		fpsCommon.push_back(std::make_pair("subType", ipc::value("OBS_COMBO_FORMAT_STRING")));
-		fpsCommon.push_back(std::make_pair("minVal", ipc::value((double)0)));
-		fpsCommon.push_back(std::make_pair("maxVal", ipc::value((double)0)));
-		fpsCommon.push_back(std::make_pair("stepVal", ipc::value((double)0)));
-		fpsCommon.push_back(std::make_pair("10", ipc::value("10")));
-		fpsCommon.push_back(std::make_pair("20", ipc::value("20")));
-		fpsCommon.push_back(std::make_pair("24 NTSC", ipc::value("24 NTSC")));
-		fpsCommon.push_back(std::make_pair("29.97", ipc::value("29.97")));
-		fpsCommon.push_back(std::make_pair("30", ipc::value("30")));
-		fpsCommon.push_back(std::make_pair("48", ipc::value("48")));
-		fpsCommon.push_back(std::make_pair("59.94", ipc::value("59.94")));
-		fpsCommon.push_back(std::make_pair("60", ipc::value("60")));
-		entries.push_back(fpsCommon);
-	} else if (fpsTypeValue == 1) {
+	if (fpsTypeValue == 1) {
 		fpsType.push_back(std::make_pair("currentValue", ipc::value("Integer FPS Value")));
 		fpsType.push_back(std::make_pair("Common FPS Values", ipc::value("Common FPS Values")));
 		fpsType.push_back(std::make_pair("Integer FPS Value", ipc::value("Integer FPS Value")));
@@ -3495,6 +3489,37 @@ std::vector<SubCategory> OBS_settings::getVideoSettings()
 		fpsDen.push_back(std::make_pair("maxVal", ipc::value((double)1000000)));
 		fpsDen.push_back(std::make_pair("stepVal", ipc::value((double)0)));
 		entries.push_back(fpsDen);
+	} else {
+		if (fpsTypeValue > 2) {
+			config_set_uint(ConfigManager::getInstance().getBasic(), "Video", "FPSType",
+					config_get_default_uint(ConfigManager::getInstance().getBasic(), "Video", "FPSType"));
+			config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
+		}
+
+		fpsType.push_back(std::make_pair("currentValue", ipc::value("Common FPS Values")));
+		fpsType.push_back(std::make_pair("Common FPS Values", ipc::value("Common FPS Values")));
+		fpsType.push_back(std::make_pair("Integer FPS Value", ipc::value("Integer FPS Value")));
+		fpsType.push_back(std::make_pair("Fractional FPS Value", ipc::value("Fractional FPS Value")));
+		entries.push_back(fpsType);
+
+		//Common FPS Values
+		std::vector<std::pair<std::string, ipc::value>> fpsCommon;
+		fpsCommon.push_back(std::make_pair("name", ipc::value("FPSCommon")));
+		fpsCommon.push_back(std::make_pair("type", ipc::value("OBS_PROPERTY_LIST")));
+		fpsCommon.push_back(std::make_pair("description", ipc::value("Common FPS Values")));
+		fpsCommon.push_back(std::make_pair("subType", ipc::value("OBS_COMBO_FORMAT_STRING")));
+		fpsCommon.push_back(std::make_pair("minVal", ipc::value((double)0)));
+		fpsCommon.push_back(std::make_pair("maxVal", ipc::value((double)0)));
+		fpsCommon.push_back(std::make_pair("stepVal", ipc::value((double)0)));
+		fpsCommon.push_back(std::make_pair("10", ipc::value("10")));
+		fpsCommon.push_back(std::make_pair("20", ipc::value("20")));
+		fpsCommon.push_back(std::make_pair("24 NTSC", ipc::value("24 NTSC")));
+		fpsCommon.push_back(std::make_pair("29.97", ipc::value("29.97")));
+		fpsCommon.push_back(std::make_pair("30", ipc::value("30")));
+		fpsCommon.push_back(std::make_pair("48", ipc::value("48")));
+		fpsCommon.push_back(std::make_pair("59.94", ipc::value("59.94")));
+		fpsCommon.push_back(std::make_pair("60", ipc::value("60")));
+		entries.push_back(fpsCommon);
 	}
 
 	videoSettings.push_back(serializeSettingsData("Untitled", entries, ConfigManager::getInstance().getBasic(), "Video", true, isCategoryEnabled));
@@ -3707,8 +3732,11 @@ std::vector<SubCategory> OBS_settings::getAdvancedSettings()
 	colorSpace.push_back(std::make_pair("minVal", ipc::value((double)0)));
 	colorSpace.push_back(std::make_pair("maxVal", ipc::value((double)0)));
 	colorSpace.push_back(std::make_pair("stepVal", ipc::value((double)0)));
-	colorSpace.push_back(std::make_pair("601", ipc::value("601")));
-	colorSpace.push_back(std::make_pair("709", ipc::value("709")));
+	colorSpace.push_back(std::make_pair("sRGB", ipc::value("sRGB")));
+	colorSpace.push_back(std::make_pair("Rec. 709", ipc::value("709")));
+	colorSpace.push_back(std::make_pair("Rec. 601", ipc::value("601")));
+	colorSpace.push_back(std::make_pair("Rec. 2100 (PQ)", ipc::value("2100PQ")));
+	colorSpace.push_back(std::make_pair("Rec. 2100 (HLG)", ipc::value("2100HLG")));
 	entries.push_back(colorSpace);
 
 	//YUV Color Range
@@ -4307,17 +4335,152 @@ void getDevices(const char *source_id, const char *property_name, std::vector<ip
 	obs_source_release(dummy_source);
 }
 
+#ifdef WIN32
+void enumVideoDevices(std::vector<ipc::value> &rval)
+{
+	ComPtr<ICreateDevEnum> deviceEnum;
+	ComPtr<IEnumMoniker> enumMoniker;
+	ComPtr<IMoniker> deviceInfo;
+	HRESULT hr;
+	DWORD count = 0;
+	ComPtr<IPropertyBag> propertyData;
+
+	hr = CoCreateInstance(CLSID_SystemDeviceEnum, NULL, CLSCTX_INPROC_SERVER, IID_ICreateDevEnum, (void **)&deviceEnum);
+	if (FAILED(hr)) {
+		blog(LOG_ERROR, "Could not create ICreateDeviceEnum");
+		return;
+	}
+
+	hr = deviceEnum->CreateClassEnumerator(CLSID_VideoInputDeviceCategory, &enumMoniker, 0);
+	if (FAILED(hr)) {
+		blog(LOG_ERROR, "CreateClassEnumerator failed");
+		return;
+	}
+
+	uint32_t nbDevices = 0;
+	if (hr == S_OK) {
+		VARIANT deviceName, devicePath;
+		deviceName.vt = VT_BSTR;
+		devicePath.vt = VT_BSTR;
+		devicePath.bstrVal = NULL;
+		while (enumMoniker->Next(1, &deviceInfo, &count) == S_OK) {
+			hr = deviceInfo->BindToStorage(0, 0, IID_IPropertyBag, (void **)&propertyData);
+			if (FAILED(hr))
+				continue;
+			hr = propertyData->Read(L"FriendlyName", &deviceName, NULL);
+			if (FAILED(hr))
+				continue;
+
+			char *utf8Name = NULL;
+			os_wcs_to_utf8_ptr(deviceName.bstrVal, 0, &utf8Name);
+			std::string deviceId = utf8Name;
+			deviceId += ':'; // Not a bug, dshow expects it as a separator
+
+			hr = propertyData->Read(L"DevicePath", &devicePath, NULL);
+			if (SUCCEEDED(hr)) {
+				char *utf8Path = NULL;
+				os_wcs_to_utf8_ptr(devicePath.bstrVal, 0, &utf8Path);
+				deviceId += utf8Path;
+			}
+
+			nbDevices++;
+			rval.push_back(ipc::value(utf8Name));
+			rval.push_back(ipc::value(deviceId));
+		}
+	}
+	rval[1] = ipc::value(nbDevices + rval[1].value_union.ui32);
+}
+
+std::string GetDeviceName(IMMDevice *device)
+{
+	if (!device) {
+		return "";
+	}
+	std::string device_name;
+	ComPtr<IPropertyStore> store;
+	HRESULT res;
+
+	if (SUCCEEDED(device->OpenPropertyStore(STGM_READ, store.Assign()))) {
+		PROPVARIANT nameVar;
+
+		PropVariantInit(&nameVar);
+		res = store->GetValue(PKEY_Device_FriendlyName, &nameVar);
+
+		if (SUCCEEDED(res) && nameVar.pwszVal && *nameVar.pwszVal) {
+			size_t len = wcslen(nameVar.pwszVal);
+			size_t size;
+
+			size = os_wcs_to_utf8(nameVar.pwszVal, len, nullptr, 0);
+			device_name.resize(size);
+			os_wcs_to_utf8(nameVar.pwszVal, len, &device_name[0], size);
+		}
+	}
+
+	return device_name;
+}
+
+void enumAudioDevices(std::vector<ipc::value> &rval, EDataFlow dataFlow)
+{
+	ComPtr<IMMDeviceEnumerator> enumerator;
+	ComPtr<IMMDeviceCollection> collection;
+	UINT count;
+	uint32_t finalCount;
+	HRESULT res;
+
+	res = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void **)enumerator.Assign());
+	if (FAILED(res))
+		blog(LOG_ERROR, "Failed to create enumerator");
+
+	res = enumerator->EnumAudioEndpoints(dataFlow, DEVICE_STATE_ACTIVE, collection.Assign());
+	if (FAILED(res))
+		blog(LOG_ERROR, "Failed to enumerate devices");
+
+	res = collection->GetCount(&count);
+	if (FAILED(res))
+		blog(LOG_ERROR, "Failed to get device count");
+
+	finalCount = count + rval[1].value_union.ui32;
+
+	for (UINT i = 0; i < count; i++) {
+		ComPtr<IMMDevice> device;
+		CoTaskMemPtr<WCHAR> w_id;
+
+		res = collection->Item(i, device.Assign());
+		if (FAILED(res)) {
+			finalCount--;
+			continue;
+		}
+
+		res = device->GetId(&w_id);
+		if (FAILED(res) || !w_id || !*w_id) {
+			finalCount--;
+			continue;
+		}
+		rval.push_back(ipc::value(GetDeviceName(device)));
+		char *id = NULL;
+		os_wcs_to_utf8_ptr(w_id, 0, &id);
+		rval.push_back(ipc::value(id));
+	}
+
+	rval[1] = ipc::value(finalCount);
+}
+
+#endif
+
 void OBS_settings::OBS_settings_getInputAudioDevices(void *data, const int64_t id, const std::vector<ipc::value> &args, std::vector<ipc::value> &rval)
 {
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 
 #ifdef WIN32
-	const char *source_id = "wasapi_input_capture";
+	rval.push_back(ipc::value((uint32_t)1));
+	rval.push_back(ipc::value("Default"));
+	rval.push_back(ipc::value("default"));
+	enumAudioDevices(rval, eCapture);
 #elif __APPLE__
 	const char *source_id = "coreaudio_input_capture";
+	getDevices(source_id, "device_id", rval);
 #endif
 
-	getDevices(source_id, "device_id", rval);
 	AUTO_DEBUG;
 }
 
@@ -4326,12 +4489,15 @@ void OBS_settings::OBS_settings_getOutputAudioDevices(void *data, const int64_t 
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 
 #ifdef WIN32
-	const char *source_id = "wasapi_output_capture";
+	rval.push_back(ipc::value((uint32_t)1));
+	rval.push_back(ipc::value("Default"));
+	rval.push_back(ipc::value("default"));
+	enumAudioDevices(rval, eRender);
 #elif __APPLE__
 	const char *source_id = "coreaudio_output_capture";
+	getDevices(source_id, "device_id", rval);
 #endif
 
-	getDevices(source_id, "device_id", rval);
 	AUTO_DEBUG;
 }
 
@@ -4340,12 +4506,13 @@ void OBS_settings::OBS_settings_getVideoDevices(void *data, const int64_t id, co
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 
 #ifdef WIN32
-	const char *source_id = "dshow_input";
-	const char *property_name = "video_device_id";
+	rval.push_back(ipc::value((uint32_t)0));
+	enumVideoDevices(rval);
 #elif __APPLE__
 	const char *source_id = "av_capture_input";
 	const char *property_name = "device";
+	getDevices(source_id, property_name, rval);
 #endif
 
-	getDevices(source_id, property_name, rval);
+	AUTO_DEBUG;
 }

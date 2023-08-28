@@ -7,14 +7,14 @@ trigger:
       - '*'
 
 variables:
-  RuntimeURL: https://artifacts.electronjs.org/headers/dist
+  RuntimeURL: https://electronjs.org/headers
   RuntimeName: iojs
-  ElectronVersion: 13.4.0
+  ElectronVersion: 17.4.11
   SLBuildDirectory: streamlabs-build
   SLGenerator: Visual Studio 16 2019
   SLDistributeDirectory: distribute
   SLFullDistributePath: $(SLBuildDirectory)\$(SLDistributeDirectory)
-  LibOBSVersion: 27.6.13
+  LibOBSVersion: 28.2.64
 
 jobs:
 - job: 'WindowsRelease'

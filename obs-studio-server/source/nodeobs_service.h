@@ -63,6 +63,7 @@
 
 #define APPLE_SOFTWARE_VIDEO_ENCODER "com.apple.videotoolbox.videoencoder.h264"
 #define APPLE_HARDWARE_VIDEO_ENCODER "com.apple.videotoolbox.videoencoder.h264.gva"
+#define APPLE_HARDWARE_VIDEO_ENCODER_M1 "com.apple.videotoolbox.videoencoder.ave.avc"
 
 #define ARCHIVE_NAME "archive_aac"
 
@@ -171,6 +172,11 @@ class OBS_service
 	    const std::vector<ipc::value>& args,
 	    std::vector<ipc::value>&       rval);
 	static void OBS_service_getLastReplay(
+	    void*                          data,
+	    const int64_t                  id,
+	    const std::vector<ipc::value>& args,
+	    std::vector<ipc::value>&       rval);
+	static void OBS_service_getLastRecording(
 	    void*                          data,
 	    const int64_t                  id,
 	    const std::vector<ipc::value>& args,
@@ -287,7 +293,17 @@ class OBS_service
 
 	// Reset contexts
 	static bool resetAudioContext(bool reload = false);
-	static int  resetVideoContext(bool reload = false);
+	static int resetVideoContext(bool reload = false, bool retryWithDefaultConf = false);
+	static int doResetVideoContext(const obs_video_info& ovi);
+
+	// Prepare the obs_video_info object for video context reset/initialization.
+	// The user configuration information will be re-read from files if |reload| is true.
+	// The default configuration will be used if |defaultConf| is true.
+	static obs_video_info prepareOBSVideoInfo(bool reload, bool defaultConf);
+
+	// Copy the successfully applied default video configuration to
+	// the user configuration, then save it to basic.ini.
+	static void keepFallbackVideoConfig(const obs_video_info& ovi);
 
 	static int GetSimpleAudioBitrate(void);
 	static int GetAdvancedAudioBitrate(int i);

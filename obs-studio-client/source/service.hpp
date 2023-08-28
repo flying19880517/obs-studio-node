@@ -18,21 +18,31 @@
 
 #pragma once
 #include <napi.h>
-#include "utility-v8.hpp"
 
 namespace osn
 {
-	class Video : public Napi::ObjectWrap<osn::Video>
+	class Service : public Napi::ObjectWrap<osn::Service>
 	{
+		public:
+		uint64_t serviceId;
+
 		public:
 		static Napi::FunctionReference constructor;
 		static Napi::Object Init(Napi::Env env, Napi::Object exports);
-		Video(const Napi::CallbackInfo& info);
+		Service(const Napi::CallbackInfo& info);
 
-		static Napi::Value skippedFrames(const Napi::CallbackInfo& info);
-		static Napi::Value encodedFrames(const Napi::CallbackInfo& info);
+		static Napi::Value Types(const Napi::CallbackInfo& info);
+		static Napi::Value Create(const Napi::CallbackInfo& info);
+		static Napi::Value GetCurrent(const Napi::CallbackInfo& info);
+		static void SetService(const Napi::CallbackInfo& info, const Napi::Value &value);
 
-		static Napi::Value get(const Napi::CallbackInfo& info);
-		static void set(const Napi::CallbackInfo& info, const Napi::Value &value);
+		Napi::Value GetName(const Napi::CallbackInfo& info);
+		Napi::Value GetProperties(const Napi::CallbackInfo& info);
+		void Update(const Napi::CallbackInfo& info);
+		Napi::Value GetSettings(const Napi::CallbackInfo& info);
+		Napi::Value GetURL(const Napi::CallbackInfo& info);
+		Napi::Value GetKey(const Napi::CallbackInfo& info);
+		Napi::Value GetUsername(const Napi::CallbackInfo& info);
+		Napi::Value GetPassword(const Napi::CallbackInfo& info);
 	};
 }

@@ -77,7 +77,7 @@ OBS_service::~OBS_service() {}
 
 void OBS_service::Register(ipc::server& srv)
 {
-	std::shared_ptr<ipc::collection> cls = std::make_shared<ipc::collection>("Service");
+	std::shared_ptr<ipc::collection> cls = std::make_shared<ipc::collection>("NodeOBS_Service");
 
 	cls->register_function(std::make_shared<ipc::function>(
 	    "OBS_service_resetAudioContext", std::vector<ipc::type>{}, OBS_service_resetAudioContext));
@@ -102,6 +102,8 @@ void OBS_service::Register(ipc::server& srv)
 	    "OBS_service_processReplayBufferHotkey", std::vector<ipc::type>{}, OBS_service_processReplayBufferHotkey));
 	cls->register_function(std::make_shared<ipc::function>(
 	    "OBS_service_getLastReplay", std::vector<ipc::type>{}, OBS_service_getLastReplay));
+	cls->register_function(std::make_shared<ipc::function>(
+	    "OBS_service_getLastRecording", std::vector<ipc::type>{}, OBS_service_getLastRecording));
 
 	cls->register_function(std::make_shared<ipc::function>(
 	    "OBS_service_createVirtualWebcam", std::vector<ipc::type>{ipc::type::String}, OBS_service_createVirtualWebcam));
@@ -270,6 +272,20 @@ bool OBS_service::resetAudioContext(bool reload)
 	return obs_reset_audio(&ai);
 }
 
+static uint64_t basicConfigGetUInt(const char *section, const char *name, bool defaultConf)
+{
+	return (defaultConf) ?
+		config_get_default_uint(ConfigManager::getInstance().getBasic(), section, name) :
+		config_get_uint(ConfigManager::getInstance().getBasic(), section, name);
+}
+
+static const char *basicConfigGetString(const char *section, const char *name, bool defaultConf)
+{
+	return (defaultConf) ?
+		config_get_default_string(ConfigManager::getInstance().getBasic(), section, name) :
+		config_get_string(ConfigManager::getInstance().getBasic(), section, name);
+}
+
 static inline enum video_format GetVideoFormatFromName(const char* name)
 {
 	if (name != NULL) {
@@ -294,10 +310,8 @@ static inline enum video_format GetVideoFormatFromName(const char* name)
 	}
 }
 
-static inline enum obs_scale_type GetScaleType(config_t* config)
+static inline enum obs_scale_type GetScaleType(const char* scaleTypeStr)
 {
-	const char* scaleTypeStr = config_get_string(config, "Video", "ScaleType");
-
 	if (scaleTypeStr != NULL) {
 		if (astrcmpi(scaleTypeStr, "bilinear") == 0)
 			return OBS_SCALE_BILINEAR;
@@ -330,9 +344,9 @@ static inline const char* GetRenderModule(config_t* config)
 	}
 }
 
-void GetFPSInteger(config_t* basicConfig, uint32_t& num, uint32_t& den)
+void GetFPSInteger(bool defaultConf, uint32_t& num, uint32_t& den)
 {
-	num = (uint32_t)config_get_uint(basicConfig, "Video", "FPSInt");
+	num = (uint32_t)basicConfigGetUInt("Video", "FPSInt", defaultConf);
 
 	if (num <= 0)
 		num = 1;
@@ -340,13 +354,13 @@ void GetFPSInteger(config_t* basicConfig, uint32_t& num, uint32_t& den)
 	den = 1;
 }
 
-void GetFPSFraction(config_t* basicConfig, uint32_t& num, uint32_t& den)
+void GetFPSFraction(bool defaultConf, uint32_t& num, uint32_t& den)
 {
-	num = (uint32_t)config_get_uint(basicConfig, "Video", "FPSNum");
+	num = (uint32_t)basicConfigGetUInt("Video", "FPSNum", defaultConf);
 	if (num <= 0)
 		num = 1;
 
-	den = (uint32_t)config_get_uint(basicConfig, "Video", "FPSDen");
+	den = (uint32_t)basicConfigGetUInt("Video", "FPSDen", defaultConf);
 	if (den <= 0)
 		den = 1;
 
@@ -356,15 +370,15 @@ void GetFPSFraction(config_t* basicConfig, uint32_t& num, uint32_t& den)
 	}
 }
 
-void GetFPSNanoseconds(config_t* basicConfig, uint32_t& num, uint32_t& den)
+void GetFPSNanoseconds(bool defaultConf, uint32_t& num, uint32_t& den)
 {
 	num = 1000000000;
-	den = (uint32_t)config_get_uint(basicConfig, "Video", "FPSNS");
+	den = (uint32_t)basicConfigGetUInt("Video", "FPSNS", defaultConf);
 }
 
-void GetFPSCommon(config_t* basicConfig, uint32_t& num, uint32_t& den)
+void GetFPSCommon(bool defaultConf, uint32_t& num, uint32_t& den)
 {
-	const char* val = config_get_string(basicConfig, "Video", "FPSCommon");
+	const char* val = basicConfigGetString("Video", "FPSCommon", defaultConf);
 	if (val != NULL) {
 		if (strcmp(val, "10") == 0) {
 			num = 10;
@@ -397,23 +411,25 @@ void GetFPSCommon(config_t* basicConfig, uint32_t& num, uint32_t& den)
 	} else {
 		num = 30;
 		den = 1;
-		config_set_uint(basicConfig, "Video", "FPSType", 0);
-		config_set_string(basicConfig, "Video", "FPSCommon", "30");
-		config_save_safe(basicConfig, "tmp", nullptr);
+		if (!defaultConf) {
+			config_set_uint(ConfigManager::getInstance().getBasic(), "Video", "FPSType", 0);
+			config_set_string(ConfigManager::getInstance().getBasic(), "Video", "FPSCommon", "30");
+			config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
+		}
 	}
 }
 
-void GetConfigFPS(config_t* basicConfig, uint32_t& num, uint32_t& den)
+void GetConfigFPS(bool defaultConf, uint32_t& num, uint32_t& den)
 {
-	uint64_t type = config_get_uint(basicConfig, "Video", "FPSType");
+	uint64_t type = basicConfigGetUInt("Video", "FPSType", defaultConf);
 	if (type == 1) //"Integer"
-		GetFPSInteger(basicConfig, num, den);
+		GetFPSInteger(defaultConf, num, den);
 	else if (type == 2) //"Fraction"
-		GetFPSFraction(basicConfig, num, den);
+		GetFPSFraction(defaultConf, num, den);
 	else if (false) //"Nanoseconds", currently not implemented
-		GetFPSNanoseconds(basicConfig, num, den);
+		GetFPSNanoseconds(defaultConf, num, den);
 	else
-		GetFPSCommon(basicConfig, num, den);
+		GetFPSCommon(defaultConf, num, den);
 }
 
 /* some nice default output resolution vals */
@@ -421,31 +437,85 @@ static const double vals[] = {1.0, 1.25, (1.0 / 0.75), 1.5, (1.0 / 0.6), 1.75, 2
 
 static const size_t numVals = sizeof(vals) / sizeof(double);
 
-int OBS_service::resetVideoContext(bool reload)
+int OBS_service::resetVideoContext(bool reload, bool retryWithDefaultConf)
 {
-	obs_video_info ovi;
-	std::string    gslib = "";
+	obs_video_info ovi = prepareOBSVideoInfo(reload, false);
+
+	config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
+
+	blog(LOG_INFO, "About to reset the video context with the user configuration");
+	int errorcode = doResetVideoContext(ovi);
+
+	// OBS_VIDEO_NOT_SUPPORTED: any of the following functions fails:
+	//   gl_init_extensions,
+	//   CreateDXGIFactory1,
+	//   DXGIFactory1::EnumAdapters1,
+	//   D3D11CreateDevice,
+	//   etc.	
+	// OBS_VIDEO_INVALID_PARAM: A parameter is invalid.
+	// OBS_VIDEO_CURRENTLY_ACTIVE: Video is currently active.
+	// OBS_VIDEO_MODULE_NOT_FOUND: Could not load a dynamic library (ovi.graphics_module):
+	//   libobs-d3d11.dll,
+	//   libobs-opengl.
+	// OBS_VIDEO_FAIL: Generic failure.
+	if (retryWithDefaultConf && (errorcode == OBS_VIDEO_FAIL || errorcode == OBS_VIDEO_INVALID_PARAM)) {
+		blog(LOG_ERROR, "The video context reset with the user configuration failed: %d", errorcode);
+
+		ovi = prepareOBSVideoInfo(false, true);
+
+		blog(LOG_INFO, "About to reset the video context with the default configuration");
+		errorcode = doResetVideoContext(ovi);
+		if (errorcode == OBS_VIDEO_SUCCESS) {
+			keepFallbackVideoConfig(ovi);
+		} else {
+			blog(LOG_ERROR, "The video context reset with the default configuration failed: %d", errorcode);
+		}
+	}
+
+	return errorcode;
+}
+
+int OBS_service::doResetVideoContext(const obs_video_info& ovi)
+{
+	try {
+		// obs_reset_video may change some parameters. For example,
+		// ovi->output_width &= 0xFFFFFFFC;
+		// ovi->output_height &= 0xFFFFFFFE;
+		// So just make a temporary copy and then forget about it.
+		obs_video_info tmp = ovi;
+		return obs_reset_video(&tmp);
+	} catch (const char* error) {
+		blog(LOG_ERROR, error);
+		return OBS_VIDEO_FAIL;
+	}
+}
+
+obs_video_info OBS_service::prepareOBSVideoInfo(bool reload, bool defaultConf)
+{
+	obs_video_info ovi = {};
 #ifdef _WIN32
-	gslib = "libobs-d3d11.dll";
+	ovi.graphics_module = "libobs-d3d11.dll";
 #else
-	gslib = "libobs-opengl";
+	ovi.graphics_module = "libobs-opengl";
 #endif
-	ovi.graphics_module = gslib.c_str();
 
 	if (reload)
 		ConfigManager::getInstance().reloadConfig();
 
-	ovi.base_width  = (uint32_t)config_get_uint(ConfigManager::getInstance().getBasic(), "Video", "BaseCX");
-	ovi.base_height = (uint32_t)config_get_uint(ConfigManager::getInstance().getBasic(), "Video", "BaseCY");
+	ovi.base_width  = (uint32_t)basicConfigGetUInt("Video", "BaseCX", defaultConf);
+	ovi.base_height = (uint32_t)basicConfigGetUInt("Video", "BaseCY", defaultConf);
 
+	// Do we really need it?
+#if 0
 	const char* outputMode = config_get_string(ConfigManager::getInstance().getBasic(), "Output", "Mode");
 
 	if (outputMode == NULL) {
 		outputMode = "Simple";
 	}
+#endif
 
-	ovi.output_width  = (uint32_t)config_get_uint(ConfigManager::getInstance().getBasic(), "Video", "OutputCX");
-	ovi.output_height = (uint32_t)config_get_uint(ConfigManager::getInstance().getBasic(), "Video", "OutputCY");
+	ovi.output_width  = (uint32_t)basicConfigGetUInt("Video", "OutputCX", defaultConf);
+	ovi.output_height = (uint32_t)basicConfigGetUInt("Video", "OutputCY", defaultConf);
 
 	std::vector<std::pair<uint32_t, uint32_t>> resolutions = OBS_API::availableResolutions();
 	uint32_t limit_cx = 1920;
@@ -466,8 +536,10 @@ int OBS_service::resetVideoContext(bool reload)
 		}
 	}
 
-	config_set_uint(ConfigManager::getInstance().getBasic(), "Video", "BaseCX", ovi.base_width);
-	config_set_uint(ConfigManager::getInstance().getBasic(), "Video", "BaseCY", ovi.base_height);
+	if (!defaultConf) {
+		config_set_uint(ConfigManager::getInstance().getBasic(), "Video", "BaseCX", ovi.base_width);
+		config_set_uint(ConfigManager::getInstance().getBasic(), "Video", "BaseCY", ovi.base_height);
+	}
 
 	if (ovi.output_width == 0 || ovi.output_height == 0) {
 		if (ovi.base_width > 1280 && ovi.base_height > 720) {
@@ -490,15 +562,18 @@ int OBS_service::resetVideoContext(bool reload)
 
 		ovi.output_width  = 1280;
 		ovi.output_height = 720;
-		config_set_uint(ConfigManager::getInstance().getBasic(), "Video", "OutputCX", ovi.output_width);
-		config_set_uint(ConfigManager::getInstance().getBasic(), "Video", "OutputCY", ovi.output_height);
+
+		if (!defaultConf) {
+			config_set_uint(ConfigManager::getInstance().getBasic(), "Video", "OutputCX", ovi.output_width);
+			config_set_uint(ConfigManager::getInstance().getBasic(), "Video", "OutputCY", ovi.output_height);
+		}
 	}
 
-	GetConfigFPS(ConfigManager::getInstance().getBasic(), ovi.fps_num, ovi.fps_den);
+	GetConfigFPS(defaultConf, ovi.fps_num, ovi.fps_den);
 
-	const char* colorFormat = config_get_string(ConfigManager::getInstance().getBasic(), "Video", "ColorFormat");
-	const char* colorSpace  = config_get_string(ConfigManager::getInstance().getBasic(), "Video", "ColorSpace");
-	const char* colorRange  = config_get_string(ConfigManager::getInstance().getBasic(), "Video", "ColorRange");
+	const char* colorFormat = basicConfigGetString("Video", "ColorFormat", defaultConf);
+	const char* colorSpace  = basicConfigGetString("Video", "ColorSpace", defaultConf);
+	const char* colorRange  = basicConfigGetString("Video", "ColorRange", defaultConf);
 
 	ovi.output_format = GetVideoFormatFromName(colorFormat);
 
@@ -508,16 +583,66 @@ int OBS_service::resetVideoContext(bool reload)
 	ovi.colorspace = astrcmpi(colorSpace, "601") == 0 ? VIDEO_CS_601 : VIDEO_CS_709;
 	ovi.range      = astrcmpi(colorRange, "Full") == 0 ? VIDEO_RANGE_FULL : VIDEO_RANGE_PARTIAL;
 
-	ovi.scale_type = GetScaleType(ConfigManager::getInstance().getBasic());
+	const char* scaleTypeStr = basicConfigGetString("Video", "ScaleType", defaultConf);
 
-	config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);
-	blog(LOG_INFO, "About to reset the video context");
-	try {
-		return obs_reset_video(&ovi);
-	} catch (const char* error) {
-		blog(LOG_ERROR, error);
-		return OBS_VIDEO_FAIL;
-	}
+	ovi.scale_type = GetScaleType(scaleTypeStr);
+
+	blog(LOG_DEBUG, "Prepared obs_video_info:");
+	blog(LOG_DEBUG, "  base_width: %u", ovi.base_width);
+	blog(LOG_DEBUG, "  base_height: %u", ovi.base_height);
+	blog(LOG_DEBUG, "  output_width: %u", ovi.output_width);
+	blog(LOG_DEBUG, "  output_height: %u", ovi.output_height);
+	blog(LOG_DEBUG, "  fps_num: %u", ovi.fps_num);
+	blog(LOG_DEBUG, "  fps_den: %u", ovi.fps_den);
+	blog(LOG_DEBUG, "  output_format: %u", static_cast<uint32_t>(ovi.output_format));
+	blog(LOG_DEBUG, "  colorspace: %u", static_cast<uint32_t>(ovi.colorspace));
+	blog(LOG_DEBUG, "  range: %u", static_cast<uint32_t>(ovi.range));
+	blog(LOG_DEBUG, "  scale_type: %u", static_cast<uint32_t>(ovi.scale_type));
+
+	return ovi;
+}
+
+static void copyDefaultUIntToUserBasicConfig(const char* section, const char* name)
+{
+	config_set_uint(ConfigManager::getInstance().getBasic(), section, name,
+		config_get_default_uint(ConfigManager::getInstance().getBasic(), section, name));
+}
+
+static void copyDefaultStringToUserBasicConfig(const char* section, const char* name)
+{
+	config_set_string(ConfigManager::getInstance().getBasic(), section, name,
+		config_get_default_string(ConfigManager::getInstance().getBasic(), section, name));
+}
+
+void OBS_service::keepFallbackVideoConfig(const obs_video_info& ovi)
+{
+	blog(LOG_DEBUG, "Saving the fallback/default video configuration to basic.ini");
+
+	// Overall, we only copy and save parameters
+	// which were used for the successful obs_reset_video call.
+	// Some values come from config_get_default_uint/config_get_default_string.
+	// The other values come from |ovi| because the default configuration
+	// does not have some of the actual values.
+	config_set_uint(ConfigManager::getInstance().getBasic(), "Video", "BaseCX", ovi.base_width);
+	config_set_uint(ConfigManager::getInstance().getBasic(), "Video", "BaseCY", ovi.base_height);
+	config_set_uint(ConfigManager::getInstance().getBasic(), "Video", "OutputCX", ovi.output_width);
+	config_set_uint(ConfigManager::getInstance().getBasic(), "Video", "OutputCY", ovi.output_height);
+
+	// Currently, there is no "FPSNS" in the default configuration,
+	// So we do not copy it here.
+	copyDefaultUIntToUserBasicConfig("Video", "FPSType");
+	copyDefaultUIntToUserBasicConfig("Video", "FPSCommon");
+	copyDefaultUIntToUserBasicConfig("Video", "FPSInt");
+	copyDefaultUIntToUserBasicConfig("Video", "FPSNum");
+	copyDefaultUIntToUserBasicConfig("Video", "FPSDen");
+
+	copyDefaultStringToUserBasicConfig("Video", "ColorFormat");
+	copyDefaultStringToUserBasicConfig("Video", "ColorSpace");
+	copyDefaultStringToUserBasicConfig("Video", "ColorRange");
+
+	copyDefaultStringToUserBasicConfig("Video", "ScaleType");
+
+	config_save_safe(ConfigManager::getInstance().getBasic(), "tmp", nullptr);	
 }
 
 const char* FindAudioEncoderFromCodec(const char* type)
@@ -942,7 +1067,9 @@ bool OBS_service::startStreaming(void)
 	if (!twitchSoundtrackEnabled)
 		setupVodTrack(isSimpleMode);
 
+	outdated_driver_error::instance()->set_active(true);
 	isStreaming = obs_output_start(streamingOutput);
+	outdated_driver_error::instance()->set_active(false);
 	if (!isStreaming) {
 		SignalInfo  signal = SignalInfo("streaming", "stop");
 		std::string outdated_driver_error = outdated_driver_error::instance()->get_error();
@@ -1187,7 +1314,9 @@ bool OBS_service::startRecording(void)
 		}
 	}
 
+	outdated_driver_error::instance()->set_active(true);
 	isRecording = obs_output_start(recordingOutput);
+	outdated_driver_error::instance()->set_active(false);
 	if (!isRecording) {
 		SignalInfo signal = SignalInfo("recording", "stop");
 		std::string outdated_driver_error = outdated_driver_error::instance()->get_error();
@@ -1360,7 +1489,9 @@ bool OBS_service::startReplayBuffer(void)
 		}
 	}
 
+	outdated_driver_error::instance()->set_active(true);
 	bool result = obs_output_start(replayBufferOutput);
+	outdated_driver_error::instance()->set_active(false);
 	if (!result) {
 		SignalInfo signal    = SignalInfo("replay-buffer", "stop");
 		isReplayBufferActive = false;
@@ -1522,6 +1653,8 @@ void OBS_service::updateVideoStreamingEncoder(bool isSimpleMode)
 				encoderID  = APPLE_SOFTWARE_VIDEO_ENCODER;
 			} else if (strcmp(encoder, APPLE_HARDWARE_VIDEO_ENCODER) == 0)  {
 				encoderID  = APPLE_HARDWARE_VIDEO_ENCODER;
+			} else if (strcmp(encoder, APPLE_HARDWARE_VIDEO_ENCODER_M1) == 0)  {
+				encoderID  = APPLE_HARDWARE_VIDEO_ENCODER_M1;
 			} else {
 				presetType = "Preset";
 				encoderID  = "obs_x264";
@@ -1569,7 +1702,8 @@ void OBS_service::updateVideoStreamingEncoder(bool isSimpleMode)
 			obs_encoder_set_preferred_video_format(videoStreamingEncoder, VIDEO_FORMAT_NV12);
 
 		if (strcmp(encoder, APPLE_SOFTWARE_VIDEO_ENCODER) == 0 ||
-				strcmp(encoder, APPLE_HARDWARE_VIDEO_ENCODER) == 0) {
+			strcmp(encoder, APPLE_HARDWARE_VIDEO_ENCODER) == 0 ||
+			strcmp(encoder, APPLE_HARDWARE_VIDEO_ENCODER_M1) == 0) {
 			const char* profile = config_get_string(ConfigManager::getInstance().getBasic(), "SimpleOutput", "Profile");
 			if (profile)
 				obs_data_set_string(h264Settings, "profile", profile);
@@ -2182,6 +2316,7 @@ void OBS_service::OBS_service_connectOutputSignals(
 	recordingSignals.push_back(SignalInfo("recording", "start"));
 	recordingSignals.push_back(SignalInfo("recording", "stop"));
 	recordingSignals.push_back(SignalInfo("recording", "stopping"));
+	recordingSignals.push_back(SignalInfo("recording", "wrote"));
 
 	replayBufferSignals.push_back(SignalInfo("replay-buffer", "start"));
 	replayBufferSignals.push_back(SignalInfo("replay-buffer", "stop"));
@@ -2334,11 +2469,39 @@ void OBS_service::OBS_service_getLastReplay(
     const std::vector<ipc::value>& args,
     std::vector<ipc::value>&       rval)
 {
+	if (!replayBufferOutput) {
+		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "Invalid replay-buffer ouput.");
+	}
+
 	calldata_t cd = {0};
 
 	proc_handler_t* ph = obs_output_get_proc_handler(replayBufferOutput);
 
-	proc_handler_call(ph, "get_last_replay", &cd);
+	proc_handler_call(ph, "get_last_file", &cd);
+	const char* path = calldata_string(&cd, "path");
+
+	if (path == NULL)
+		path = "";
+
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	rval.push_back(ipc::value(path));
+}
+
+void OBS_service::OBS_service_getLastRecording(
+    void*                          data,
+    const int64_t                  id,
+    const std::vector<ipc::value>& args,
+    std::vector<ipc::value>&       rval)
+{
+	if (!recordingOutput) {
+		PRETTY_ERROR_RETURN(ErrorCode::CriticalError, "Invalid recording ouput.");
+	}
+
+	calldata_t cd = {0};
+
+	proc_handler_t* ph = obs_output_get_proc_handler(recordingOutput);
+
+	proc_handler_call(ph, "get_last_file", &cd);
 	const char* path = calldata_string(&cd, "path");
 
 	if (path == NULL)

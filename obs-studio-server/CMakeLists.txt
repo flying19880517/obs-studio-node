@@ -166,6 +166,11 @@ download_project(
 	URL ${OSN_LIBOBS_URL}
 	UPDATE_DISCONNECTED 1
 )
+if(WIN32)
+	# LibObsTarget.cmake in widnows builds now contains a check for w32-pthreads 
+	# so we have to explicitly add it before libobs.
+	include("${libobs_SOURCE_DIR}/cmake/w32-pthreads/w32-pthreadsConfig.cmake")
+endif()
 
 include("${libobs_SOURCE_DIR}/cmake/LibObs/LibObsConfig.cmake")
 
@@ -376,6 +381,13 @@ ENDIF()
 IF( NOT CLANG_ANALYZE_CONFIG)
 	cppcheck_add_project(${PROJECT_NAME})
 ENDIF()
+
+# Compare current linked libs with prev
+if(WIN32)
+	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+		COMMAND ${CMAKE_SOURCE_DIR}/dependency_checker/check_dependencies.cmd $<TARGET_FILE:obs-studio-server> ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR} $<CONFIG>
+	)
+endif()
 
 set(PROGRAM_PERMISSIONS_DEFAULT
     OWNER_WRITE OWNER_READ OWNER_EXECUTE

@@ -90,6 +90,8 @@ SET(osn-client_SOURCES
 	"source/module.hpp"
 	"source/cache-manager.hpp"
 	"source/cache-manager.cpp"
+	"source/service.hpp"
+	"source/service.cpp"
 
 	###### callback-manager ######
 	"source/callback-manager.cpp"
@@ -169,6 +171,13 @@ if(WIN32)
 			NOMINMAX
 			UNICODE
 			_UNICODE
+	)
+endif()
+
+# Compare current linked libs with prev
+if(WIN32)
+	add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+		COMMAND ${CMAKE_SOURCE_DIR}/dependency_checker/check_dependencies.cmd $<TARGET_FILE:obs_studio_client> ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_SOURCE_DIR} $<CONFIG>
 	)
 endif()
 

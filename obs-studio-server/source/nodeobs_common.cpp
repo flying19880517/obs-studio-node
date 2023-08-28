@@ -30,6 +30,7 @@
 #include <thread>
 
 std::map<std::string, OBS::Display*> displays;
+std::mutex                           displaysMutex;
 std::string                          sourceSelected;
 bool                                 firstDisplayCreation = true;
 
@@ -136,6 +137,8 @@ static void OnDeviceLost(void* data)
 
 static void OnDeviceRebuilt(void* device, void* data)
 {
+	std::scoped_lock lock(displaysMutex);
+
 	for (const auto& p : displays) {
 		if (auto display = p.second) {
 			// After device is rebuilt, there are can be problems with incorrect size of display
@@ -219,6 +222,11 @@ void OBS_content::Register(ipc::server& srv)
 	    OBS_content_setDrawGuideLines));
 
 	cls->register_function(std::make_shared<ipc::function>(
+	    "OBS_content_setDrawRotationHandle",
+	    std::vector<ipc::type>{ipc::type::String, ipc::type::Int32},
+	    OBS_content_setDrawRotationHandle));
+
+	cls->register_function(std::make_shared<ipc::function>(
 	    "OBS_content_createIOSurface",
 	    std::vector<ipc::type>{ipc::type::String},
 	    OBS_content_createIOSurface));
@@ -232,10 +240,10 @@ void popupAeroDisabledWindow(void)
 #ifdef WIN32
 	MessageBox(
 	    NULL,
-	    TEXT("Streamlabs OBS needs Aero enabled to run properly on Windows 7.  "
+	    TEXT("Streamlabs Desktop needs Aero enabled to run properly on Windows 7.  "
 	         "If you've disabled Aero for performance reasons, "
 	         "you may still use the app, but you will need to keep the window maximized.\n\n\n\n\n"
-	         "This is a workaround to keep Streamlabs OBS running and not the preferred route. "
+	         "This is a workaround to keep Streamlabs Desktop running and not the preferred route. "
 	         "We recommend upgrading to Windows 10 or enabling Aero."),
 	    TEXT("Aero is disabled"),
 	    MB_OK);
@@ -248,6 +256,8 @@ void OBS_content::OBS_content_createDisplay(
     const std::vector<ipc::value>& args,
     std::vector<ipc::value>&       rval)
 {
+	std::scoped_lock lock(displaysMutex);
+
 	uint64_t windowHandle = args[0].value_union.ui64;
 	auto     found        = displays.find(args[1].value_str);
 
@@ -313,6 +323,8 @@ void OBS_content::OBS_content_destroyDisplay(
     const std::vector<ipc::value>& args,
     std::vector<ipc::value>&       rval)
 {
+	std::scoped_lock lock(displaysMutex);
+
 	auto found = displays.find(args[0].value_str);
 
 	if (found == displays.end()) {
@@ -334,6 +346,8 @@ void OBS_content::OBS_content_destroyDisplay(
 
 void OBS_content::OBS_content_shutdownDisplays()
 {
+	std::scoped_lock lock(displaysMutex);
+
 	blog(LOG_DEBUG, "Displays remaining till shutdown %d", displays.size());
 	while (displays.size() > 0) {
 		auto itr = displays.begin();
@@ -348,6 +362,8 @@ void OBS_content::OBS_content_createSourcePreviewDisplay(
     const std::vector<ipc::value>& args,
     std::vector<ipc::value>&       rval)
 {
+	std::scoped_lock lock(displaysMutex);
+
 	uint64_t windowHandle = args[0].value_union.ui64;
 
 	auto found = displays.find(args[2].value_str);
@@ -639,6 +655,24 @@ void OBS_content::OBS_content_setDrawGuideLines(
 		return;
 	}
 	it->second->SetDrawGuideLines((bool)args[1].value_union.i32);
+	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
+	AUTO_DEBUG;
+}
+
+void OBS_content::OBS_content_setDrawRotationHandle(
+    void*                          data,
+    const int64_t                  id,
+    const std::vector<ipc::value>& args,
+    std::vector<ipc::value>&       rval)
+{
+	// Find Display
+	auto it = displays.find(args[0].value_str);
+	if (it == displays.end()) {
+		rval.push_back(ipc::value((uint64_t)ErrorCode::Error));
+		rval.push_back(ipc::value("Display key is not valid!"));
+		return;
+	}
+	it->second->SetDrawRotationHandle((bool)args[1].value_union.ui32);
 	rval.push_back(ipc::value((uint64_t)ErrorCode::Ok));
 	AUTO_DEBUG;
 }

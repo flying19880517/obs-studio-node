@@ -98,6 +98,7 @@ describe(testName, () => {
                     settings = inputSettings.ffmpegSource;
                     settings['speed_percent'] = 80;
                     settings['reconnect_delay_sec'] = 10;
+                    settings['volume'] = 100;
                     break;
                 }
                 case 'ndi_source': {
@@ -143,6 +144,7 @@ describe(testName, () => {
                         settings['compatibility'] = true;
                         settings['client_area'] = true;
                         settings['method'] = 0;
+                        settings['window'] = '';
                     } else if (obs.os == 'darwin') {
                         settings = inputSettings.macWindowCapture;
                         settings['show_empty_names'] = true;
@@ -158,6 +160,7 @@ describe(testName, () => {
                     settings = inputSettings.dshowInput;
                     settings['video_format'] = 1;
                     settings['autorotation'] = true;
+                    settings['hw_decode'] = false;
                     break;
                 }
                 case 'wasapi_input_capture': 
@@ -376,7 +379,8 @@ describe(testName, () => {
                             // Adding ndi filter to ndi source
                             input.addFilter(filter);
                         }
-                    } else if (filterType === 'async_delay_filter') {
+                    } else if (filterType === 'async_delay_filter' ||
+                        filterType === 'mediasoupconnector_vfilter') {
                         if (inputType === 'ffmpeg_source' ||
                             inputType === 'dshow_input') {
                             const filter = osn.FilterFactory.create(filterType, filterType);

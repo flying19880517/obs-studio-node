@@ -45,6 +45,7 @@
 #include "osn-video.hpp"
 #include "osn-volmeter.hpp"
 #include "callback-manager.h"
+#include "osn-service.hpp"
 
 #include "util-crashmanager.h"
 #include "shared.hpp"
@@ -240,6 +241,7 @@ int main(int argc, char* argv[])
 	OBS_settings::Register(myServer);
 	OBS_settings::Register(myServer);
 	autoConfig::Register(myServer);
+	osn::Service::Register(myServer);
 
 	OBS_API::CreateCrashHandlerExitPipe();
 
@@ -286,10 +288,12 @@ int main(int argc, char* argv[])
 	OBS_API::WaitCrashHandlerClose(waitBeforeClosing);
 #endif
 	osn::Source::finalize_global_signals();
-	OBS_API::destroyOBS_API();
 
-	// Finalize Server
+	// First, be sure there are no connected clients
 	myServer.finalize();
+
+	// Then, shutdown OBS
+	OBS_API::destroyOBS_API();
 #ifdef __APPLE__
 	if (override_std_fd) {
 		close(out_pid);

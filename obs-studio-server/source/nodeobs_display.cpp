@@ -53,18 +53,11 @@ static void RecalculateApectRatioConstrainedSize(uint32_t origW, uint32_t origH,
 	outY = (int32_t(origH / 2) - int32_t(outH / 2));
 }
 
-static void RecalculateAspectFillRatioConstrainedSize(
-    uint32_t  origW,
-    uint32_t  origH,
-    uint32_t  sourceW,
-    uint32_t  sourceH,
-    int32_t&  outX,
-    int32_t&  outY,
-    uint32_t& outW,
-    uint32_t& outH)
+static void RecalculateAspectFillRatioConstrainedSize(uint32_t origW, uint32_t origH, uint32_t sourceW, uint32_t sourceH, int32_t &outX, int32_t &outY,
+						      uint32_t &outW, uint32_t &outH)
 {
 	double_t sourceAR = double_t(sourceW) / double_t(sourceH);
-	double_t origAR   = double_t(origW) / double_t(origH);
+	double_t origAR = double_t(origW) / double_t(origH);
 	if (origAR < sourceAR) {
 		outW = uint32_t(double_t(origH) * sourceAR);
 		outH = origH;
@@ -1600,9 +1593,9 @@ void OBS::Display::UpdatePreviewArea()
 	RecalculateApectRatioConstrainedSize(m_gsInitData.cx, m_gsInitData.cy, sourceW, sourceH, m_previewOffset.first, m_previewOffset.second,
 					     m_previewSize.first, m_previewSize.second);
 
-	if(m_scaleAspectFill){
+	if (m_scaleAspectFill) {
 		RecalculateAspectFillRatioConstrainedSize(m_gsInitData.cx, m_gsInitData.cy, sourceW, sourceH, m_previewOffset.first, m_previewOffset.second,
-					     m_previewSize.first, m_previewSize.second);
+							  m_previewSize.first, m_previewSize.second);
 	}
 
 	// std::string msg = "<" + std::string(__FUNCTION__) + "> Adjusting display size to %ldx%ld. source %ldx%ld. preview offset %ld,%ld. preview size %ldx%ld. hwnd %d";

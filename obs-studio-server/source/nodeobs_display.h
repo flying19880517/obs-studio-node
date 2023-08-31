@@ -165,7 +165,7 @@ private:
 	vec4 m_rotationHandleColorVec4;
 
 	bool m_shouldDrawUI = true;
-	bool m_scaleAspectFill  = false;
+	bool m_scaleAspectFill = false;
 	bool m_renderAtBottom = false;
 
 	enum obs_video_rendering_mode m_renderingMode = OBS_MAIN_VIDEO_RENDERING;
